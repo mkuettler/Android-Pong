@@ -35,59 +35,47 @@ public class PongActivity extends Activity
     {
 	
 	private GestureDetector gestures;
-	private float posX;
-	private float posY;
-	private float targetX;
-	private float targetY;
-	private Rect boundary;
 	private InfiniteTimer timer;
 	private long timer_tick_length = 50;
 	private long timer_run_length = 1000;
-	private float max_velocity = 1000f;
-	private boolean fling_mode;
-	private float fling_vX;
-	private float fling_vY;
-	private long fling_time;
+	private final float max_player_velocity = 1000f;
+	private final float player_radius = 10f;
+	private Player player1;
+	private Player player2;
+	private Ball ball;
 
 	public PlayAreaView(Context context) {
 	    super(context);
-	    posX = 100f;
-	    posY = 100f;
-	    targetX = posX;
-	    targetY = posY;
-	    fling_mode = false;
 	    timer = null;
-	    gestures = new GestureDetector(PongActivity.this,
-					   new GestureListener(this));
+	    player1 = new HumanPlayer(0xFFFF0000, player_radius, 
+				 max_player_velocity);
+	    player2 = new Player(0xFF0000FF, player_radius, 
+				 max_player_velocity);
+	    gestures = new GestureDetector
+		(PongActivity.this,new GestureListener
+		 (this, (HumanPlayer)player1));
+	    setTimer();
 	}
 
 	@Override
 	public void onDraw(Canvas canvas) {
 	    //canvas.drawColor(0xFF00FF00);
-	    Paint p = new Paint();
-	    p.setColor(0xFFFF0000);
-	    p.setAntiAlias(true);
-	    canvas.drawCircle(posX, posY, 10.0f, p);
+	    player1.draw(canvas);
+	    player2.draw(canvas);
 	}
 
 	public void onSizeChanged(int w, int h, int oldw, int oldh) {
 	    super.onSizeChanged(w,h,oldw,oldh);
-	    boundary = new Rect(0, h/2, w, h);
-	    posX = w/2;
-	    posY = 3*h/4;
-	    targetX = posX;
-	    targetY = posY;
-	    Toast.makeText(PongActivity.this, "New size = "+
-			   Integer.toString(w)+" "+Integer.toString(h),
-			   Toast.LENGTH_LONG).show();
+	    Rect boundary = new Rect(0, h/2, w, h);
+	    player1.setBoundary(boundary);
+	    player1.setPosition(w/2f, 3f*h/4);
+	    boundary = new Rect(0, 0, w, h/2);
+	    player2.setBoundary(boundary);
+	    player2.setPosition(w/2f, h/4f);
 	}
 
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
-	    /*int action = event.getAction();
-	    if (action == MotionEvent.ACTION_DOWN) {
-		moveTo(event.getX(), event.getY());
-		} else if (action == MotionEvent.ACTION*/
 	    return gestures.onTouchEvent(event);
 	}
 
@@ -97,44 +85,112 @@ public class PongActivity extends Activity
 	}
 
 	public void timerTicked() {
-	    if (!fling_mode) {
-		moveToTarget( timer_tick_length * max_velocity / 1000f );
-	    } else {
-		flingMove();
-	    }
+	    player1.doMove(timer_tick_length);
+	    player2.doMove(timer_tick_length);
+	    invalidate();
 	}
 
 	public void timerFinished() {
-	    if (posX != targetX || posY != targetY || fling_mode) {
-		setTimer();
-	    } else {
-		timer = null;
-	    }
+	    setTimer();
+	}
+    }
+
+    /*
+     * Common Super-class
+     */
+    private abstract class Ball {
+	private int color;
+	protected float posX;
+	protected float posY;
+	protected float radius;
+
+	public Ball(int color, float radius) {
+	    this.color = color;
+	    this.radius = radius;
 	}
 
-	/*
-	 * The movement probably would benefit from the usage of an
-	 * Interpolator. Yet I don't find that very convenient.
-	 */
+	public void setPosition(float posX, float posY) {
+	    this.posX = posX;
+	    this.posY = posY;
+	}
 
-	/*public void moveBy(final float dx, final float dy) {
+	public void setBoundary(Rect b) {
+	    this.boundary = b;
+	}
+
+	public void draw(Canvas canvas) {
+	    Paint p = new Paint();
+	    p.setColor(color);
+	    p.setAntiAlias(true);
+	    canvas.drawCircle(posX, posY, radius, p);
+	}
+
+	abstract public void doMove(long time);
+
+    }
+
+    /*
+     * Player class
+     */
+
+    private abstract class Player
+    {
+
+	private int color;
+	public float posX;
+	public float posY;
+	public float radius;
+	protected float targetX;
+	protected float targetY;
+	protected Rect boundary;
+	protected float max_velocity;
+	
+
+	public Player(int color, float radius, float max_velocity) {
+	    super(color, radius);
+	    this.max_velocity = max_velocity;
+	}
+
+	@Override
+	public void setPosition(float posX, float posY) {
+	    super(posX, posY);
+	    this.targetX = posX;
+	    this.targetY = posY;
+	}
+
+    }
+
+    /*
+     * Human Player
+     */
+
+    class HumanPlayer extends Player {
+
+	private boolean fling_mode;
+	private float fling_vX;
+	private float fling_vY;
+	private long fling_time;
+
+	public HumanPlayer(int color, float radius, float max_velocity) {
+	    super(color, radius, max_velocity);
 	    fling_mode = false;
-	    targetX = targetX + dx;
-	    targetY = targetY + dy;
-	    clipTarget();
-	    if (timer == null) {
-		setTimer();
+	}
+
+	@Override
+	public void doMove(long time) {
+	    if (!fling_mode) {
+		moveToTarget( max_velocity * time / 1000f);
+	    } else {
+		flingMove(time);
 	    }
-	    }*/
+	    
+	}
 
 	public void moveTo(final float x, final float y) {
 	    fling_mode = false;
 	    targetX = x;
 	    targetY = y;
 	    clipTarget();
-	    if (timer == null) {
-		setTimer();
-	    }
 	}
 
 	private void clipTarget() {
@@ -181,29 +237,26 @@ public class PongActivity extends Activity
 	    if (dist <= max_dist) {
 		posX = targetX;
 		posY = targetY;
-		invalidate();
 		return true;
 	    } else {
 		posX = posX + (targetX-posX) * max_dist/dist;
 		posY = posY + (targetY-posY) * max_dist/dist;
-		invalidate();
 		return false;
 	    }
 	}
 
-	private boolean flingMove() {
-	    posX = posX + fling_vX * timer_tick_length / 1000;
-	    posY = posY + fling_vY * timer_tick_length / 1000;
+	private boolean flingMove(long time) {
+	    posX = posX + fling_vX * time / 1000;
+	    posY = posY + fling_vY * time / 1000;
 	    reflectPosition();
 	    fling_vX = fling_vX * 0.8f;
 	    fling_vY = fling_vY * 0.8f;
-	    fling_time = fling_time - timer_tick_length;
+	    fling_time = fling_time - time;
 	    if (fling_time <= 0) {
 		fling_mode = false;
 		targetX = posX;
 		targetY = posY;
 	    }
-	    invalidate();
 	    return !fling_mode;
 	}
 
@@ -219,52 +272,109 @@ public class PongActivity extends Activity
 		fling_vY = fling_vY * max_velocity/fv;
 	    }
 	    fling_time = 800;
-	    if (timer == null) {
-		setTimer();
-	    }
 	}
-	
+
     }
 
-    /*private class Player
-    {
+    /*
+     * PongBall
+     */
 
-	int color;
-	Rect boundary;
+    private class PongBall extends Ball {
 	
-
-	public Player() {
-	    
+	private float velX;
+	private float velY;
+	private Rect boundary;
+	private Player player1;
+	private Player player2;
+	
+	
+	public PongBall(int color, float radius) {
+	    super(color, radius);
+	    velX = 0;
+	    velY = 0;
 	}
-	}*/
+
+	public void setPosition(float x, float y) {
+	    super(x,y);
+	}
+
+	public void setSpeed(float x, float y) {
+	    velX = x;
+	    velY = y;
+	}
+
+	public void setBoundary(final Rect boundary) {
+	    this.boundary = boundary;
+	}
+
+	@Override
+	public void doMove(long time) {
+	    float dx = velX * time / 1000f;
+	    float dy = velY * time / 1000f;
+	    float newX = posX + dx;
+	    float newY = posY + dy;
+	    boolean change;
+	    do {
+		change = false;
+		if ((player1.newX-newX)*(player1.newX-newX) + 
+		    (player1.newY-newY)*(player1.newY-newY) <=
+		    player1.radius + radius) {
+		    /* some smart code here... */
+		} else if ((player2.newX-newX)*(player2.newX-newX) + 
+		    (player2.newY-newY)*(player2.newY-newY) <=
+		    player2.radius + radius) {
+		    /* and here... */
+		} else if (newX < boundary.left) {
+		    newX = 2*boundary.left - newX;
+		    fling_vX = -fling_vX;
+		    change = true;
+		} else if (newX > boundary.right) {
+		    newX = 2*boundary.right - newX;
+		    fling_vX = -fling_vX;
+		    change = true;
+		} else if (newY > boundary.bottom) {
+		    newY = 2*boundary.bottom - newY;
+		    fling_vY = -fling_vY;
+		    change = true;
+		} else if (newY < boundary.top) {
+		    newY = 2*boundary.top - newY;
+		    fling_vY = -fling_vY;
+		    change = true;
+		}
+	    } while (change);
+	}
+    }
 
     private class GestureListener implements GestureDetector.OnGestureListener,
 					     GestureDetector.OnDoubleTapListener
     {
 	PlayAreaView view;
+	HumanPlayer player;
 
-	public GestureListener(PlayAreaView view) {
+	    public GestureListener(PlayAreaView view, HumanPlayer player) {
 	    this.view = view;
+	    this.player = player;
 	}
 
 	@Override
 	public boolean onDown(MotionEvent e) {
 	    /* We should not always return true here. */
-	    view.moveTo(e.getX(), e.getY());
+	    player.moveTo(e.getX(), e.getY());
 	    return true;
 	}
 
 	@Override
 	public boolean onScroll(MotionEvent e1, MotionEvent e2, 
 				float dX, float dY) {
-	    view.moveTo(e2.getX(), e2.getY());
+	    player.moveTo(e2.getX(), e2.getY());
 	    return true;
 	}
 
 	@Override
 	public boolean onFling (MotionEvent e1, MotionEvent e2,
 				final float vX, final float vY) {
-	    view.flingBy(vX, vY);
+	    player.flingBy(vX, vY);
 	    return true;
 	}
 
