@@ -4,6 +4,8 @@ import android.content.Context;
 import android.app.Activity;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.view.View;
@@ -20,12 +22,13 @@ public class PongActivity extends Activity
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //setContentView(R.layout.main);
+        setContentView(R.layout.main);
 
-	setContentView(new PlayAreaView(this));
-	/*FrameLayout frame = (FrameLayout) findViewById(R.id.frame_layout);
+	//setContentView(new PlayAreaView(this));
+	FrameLayout frame = (FrameLayout) findViewById(R.id.frame_layout);
 	PlayAreaView play_area = new PlayAreaView(this);
-	frame.addView(play_area);*/
+	frame.addView(play_area);
+	frame.bringChildToFront(play_area);
     }
 
     public class PlayAreaView extends View
@@ -36,8 +39,9 @@ public class PongActivity extends Activity
 	private float posY;
 	private float targetX;
 	private float targetY;
+	private Rect boundary;
 	private InfiniteTimer timer;
-	private long timer_tick_length = 100;
+	private long timer_tick_length = 50;
 	private long timer_run_length = 1000;
 	private float max_velocity = 1000f;
 	private boolean fling_mode;
@@ -47,8 +51,8 @@ public class PongActivity extends Activity
 
 	public PlayAreaView(Context context) {
 	    super(context);
-	    posX = 50f;
-	    posY = 70f;
+	    posX = 100f;
+	    posY = 100f;
 	    targetX = posX;
 	    targetY = posY;
 	    fling_mode = false;
@@ -59,18 +63,31 @@ public class PongActivity extends Activity
 
 	@Override
 	public void onDraw(Canvas canvas) {
-	    Toast.makeText(PongActivity.this,
-			   "onDraw " + Float.toString(canvas.getHeight())+" "
-			   +Float.toString(canvas.getWidth()),
-			   Toast.LENGTH_SHORT).show();
+	    //canvas.drawColor(0xFF00FF00);
 	    Paint p = new Paint();
-	    p.setColor(0x00FFFFFF);
+	    p.setColor(0xFFFF0000);
 	    p.setAntiAlias(true);
 	    canvas.drawCircle(posX, posY, 10.0f, p);
 	}
 
+	public void onSizeChanged(int w, int h, int oldw, int oldh) {
+	    super.onSizeChanged(w,h,oldw,oldh);
+	    boundary = new Rect(0, h/2, w, h);
+	    posX = w/2;
+	    posY = 3*h/4;
+	    targetX = posX;
+	    targetY = posY;
+	    Toast.makeText(PongActivity.this, "New size = "+
+			   Integer.toString(w)+" "+Integer.toString(h),
+			   Toast.LENGTH_LONG).show();
+	}
+
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
+	    /*int action = event.getAction();
+	    if (action == MotionEvent.ACTION_DOWN) {
+		moveTo(event.getX(), event.getY());
+		} else if (action == MotionEvent.ACTION*/
 	    return gestures.onTouchEvent(event);
 	}
 
@@ -88,10 +105,6 @@ public class PongActivity extends Activity
 	}
 
 	public void timerFinished() {
-	    Toast.makeText(PongActivity.this,
-			   Float.toString(posX)+" "+Float.toString(targetX)+" "
-			   +Float.toString(posY)+" "+Float.toString(targetY),
-			   Toast.LENGTH_LONG).show();
 	    if (posX != targetX || posY != targetY || fling_mode) {
 		setTimer();
 	    } else {
@@ -104,22 +117,62 @@ public class PongActivity extends Activity
 	 * Interpolator. Yet I don't find that very convenient.
 	 */
 
-	public void moveBy(final float dx, final float dy) {
+	/*public void moveBy(final float dx, final float dy) {
 	    fling_mode = false;
 	    targetX = targetX + dx;
 	    targetY = targetY + dy;
+	    clipTarget();
 	    if (timer == null) {
 		setTimer();
 	    }
-	}
+	    }*/
 
 	public void moveTo(final float x, final float y) {
 	    fling_mode = false;
 	    targetX = x;
 	    targetY = y;
+	    clipTarget();
 	    if (timer == null) {
 		setTimer();
 	    }
+	}
+
+	private void clipTarget() {
+	    if (targetX < boundary.left) {
+		targetX = boundary.left;
+	    } else if (targetX > boundary.right) {
+		targetX = boundary.right;
+	    }
+	    if (targetY > boundary.bottom) {
+		targetY = boundary.bottom;
+	    } else if (targetY < boundary.top) {
+		targetY = boundary.top;
+	    }
+	}
+
+	private void reflectPosition() {
+	    boolean change;
+	    do {
+		change = false;
+		if (posX < boundary.left) {
+		    posX = 2*boundary.left - posX;
+		    fling_vX = -fling_vX;
+		    change = true;
+		} else if (posX > boundary.right) {
+		    posX = 2*boundary.right - posX;
+		    fling_vX = -fling_vX;
+		    change = true;
+		}
+		if (posY > boundary.bottom) {
+		    posY = 2*boundary.bottom - posY;
+		    fling_vY = -fling_vY;
+		    change = true;
+		} else if (posY < boundary.top) {
+		    posY = 2*boundary.top - posY;
+		    fling_vY = -fling_vY;
+		    change = true;
+		}
+	    } while (change);
 	}
 
 	private boolean moveToTarget(final float max_dist) {
@@ -131,8 +184,8 @@ public class PongActivity extends Activity
 		invalidate();
 		return true;
 	    } else {
-		posX = posX + (targetX-posX) * dist/max_dist;
-		posY = posY + (targetY-posY) * dist/max_dist;
+		posX = posX + (targetX-posX) * max_dist/dist;
+		posY = posY + (targetY-posY) * max_dist/dist;
 		invalidate();
 		return false;
 	    }
@@ -141,11 +194,14 @@ public class PongActivity extends Activity
 	private boolean flingMove() {
 	    posX = posX + fling_vX * timer_tick_length / 1000;
 	    posY = posY + fling_vY * timer_tick_length / 1000;
+	    reflectPosition();
 	    fling_vX = fling_vX * 0.8f;
 	    fling_vY = fling_vY * 0.8f;
 	    fling_time = fling_time - timer_tick_length;
 	    if (fling_time <= 0) {
 		fling_mode = false;
+		targetX = posX;
+		targetY = posY;
 	    }
 	    invalidate();
 	    return !fling_mode;
@@ -155,13 +211,32 @@ public class PongActivity extends Activity
 	    fling_mode = true;
 	    fling_vX = vX;
 	    fling_vY = vY;
-	    fling_time = 400;
+	    if (fling_vX*fling_vX + fling_vY*fling_vY > 
+		max_velocity*max_velocity) {
+		final float fv = FloatMath.sqrt(fling_vX*fling_vX + 
+						fling_vY*fling_vY);
+		fling_vX = fling_vX * max_velocity/fv;
+		fling_vY = fling_vY * max_velocity/fv;
+	    }
+	    fling_time = 800;
 	    if (timer == null) {
 		setTimer();
 	    }
 	}
 	
     }
+
+    /*private class Player
+    {
+
+	int color;
+	Rect boundary;
+	
+
+	public Player() {
+	    
+	}
+	}*/
 
     private class GestureListener implements GestureDetector.OnGestureListener,
 					     GestureDetector.OnDoubleTapListener
@@ -174,19 +249,15 @@ public class PongActivity extends Activity
 
 	@Override
 	public boolean onDown(MotionEvent e) {
-	    Toast.makeText(PongActivity.this,
-			   Float.toString(e.getX())+", "
-			   +Float.toString(e.getY()),
-			   Toast.LENGTH_SHORT).show();
 	    /* We should not always return true here. */
-	    //view.moveTo(e.getX(), e.getY());
+	    view.moveTo(e.getX(), e.getY());
 	    return true;
 	}
 
 	@Override
 	public boolean onScroll(MotionEvent e1, MotionEvent e2, 
 				float dX, float dY) {
-	    view.moveBy(dX,dY);
+	    view.moveTo(e2.getX(), e2.getY());
 	    return true;
 	}
 
