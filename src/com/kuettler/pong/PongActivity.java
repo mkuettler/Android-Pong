@@ -39,9 +39,9 @@ public class PongActivity extends Activity
 	private long timer_tick_length = 50;
 	private long timer_run_length = 1000;
 	private final float max_player_velocity = 1000f;
-	private final float player_radius = 20f;
+	private final float player_radius = 30f;
 	private final float max_ball_velocity = 2000f;
-	private final float ball_radius = 10f;
+	private final float ball_radius = 15f;
 	private Player player1;
 	private Player player2;
 	private PongBall ball;
@@ -151,6 +151,14 @@ public class PongActivity extends Activity
 	    canvas.drawCircle(posX, posY, radius, p);
 	}
 
+	private void clapSpeed() {
+	    final float s = FloatMath.sqrt(velX*velX+velY+velY);
+	    if (s > max_velocity) {
+		velX = velX * max_velocity/s;
+		velY = velY * max_velocity/s;
+	    }
+	}
+	
 	abstract public void doMove(long time);
 
     }
@@ -321,14 +329,6 @@ public class PongActivity extends Activity
 	    mass = 2.0f;
 	}
 
-	private void clapSpeed() {
-	    final float s = FloatMath.sqrt(velX*velX+velY+velY);
-	    if (s > max_velocity) {
-		velX = velX * max_velocity/s;
-		velY = velY * max_velocity/s;
-	    }
-	}
-	
 	private Pair<Float,Float> collideTime(float time, Ball ba) {
 	    final float vx = velX;
 	    final float vy = velY;
