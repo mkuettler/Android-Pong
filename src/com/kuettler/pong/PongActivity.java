@@ -151,7 +151,7 @@ public class PongActivity extends Activity
 	    canvas.drawCircle(posX, posY, radius, p);
 	}
 
-	private void clapSpeed() {
+	protected void clapSpeed() {
 	    final float s = FloatMath.sqrt(velX*velX+velY+velY);
 	    if (s > max_velocity) {
 		velX = velX * max_velocity/s;
