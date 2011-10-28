@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 import android.util.FloatMath;
 import android.util.Pair;
 import android.widget.Toast;
+import android.os.Vibrator;
 
 public class PongActivity extends Activity
 {
@@ -33,7 +34,7 @@ public class PongActivity extends Activity
 
     public class PlayAreaView extends View
     {
-	
+
 	private GestureDetector gestures;
 	private InfiniteTimer timer;
 	private long timer_tick_length = 50;
@@ -49,11 +50,11 @@ public class PongActivity extends Activity
 	public PlayAreaView(Context context) {
 	    super(context);
 	    timer = null;
-	    player1 = new HumanPlayer(0xFFFF0000, player_radius, 
+	    player1 = new HumanPlayer(0xFFFF0000, player_radius,
 				 max_player_velocity);
-	    player2 = new HumanPlayer(0xFF0000FF, player_radius, 
+	    player2 = new HumanPlayer(0xFF0000FF, player_radius,
 				 max_player_velocity);
-	    ball = new PongBall(0xFFFFFFFF, ball_radius, 
+	    ball = new PongBall(0xFFFFFFFF, ball_radius,
 				player1, player2, max_ball_velocity);
 	    gestures = new GestureDetector
 		(PongActivity.this,new GestureListener
@@ -158,7 +159,7 @@ public class PongActivity extends Activity
 		velY = velY * max_velocity/s;
 	    }
 	}
-	
+
 	abstract public void doMove(long time);
 
     }
@@ -208,7 +209,7 @@ public class PongActivity extends Activity
 	    } else {
 		flingMove(time);
 	    }
-	    
+
 	}
 
 	public void moveTo(final float x, final float y) {
@@ -258,7 +259,7 @@ public class PongActivity extends Activity
 
 	private boolean moveToTarget(long time) {
 	    final float max_dist = max_velocity * time / 1000f;
-	    final float dist = FloatMath.sqrt((posX-targetX)*(posX-targetX) + 
+	    final float dist = FloatMath.sqrt((posX-targetX)*(posX-targetX) +
 					      (posY-targetY)*(posY-targetY));
 	    if (dist <= max_dist) {
 		velX = (targetX - posX)*1000f/time;
@@ -298,9 +299,9 @@ public class PongActivity extends Activity
 	    fling_mode = true;
 	    velX = vX;
 	    velY = vY;
-	    if (velX*velX + velY*velY > 
+	    if (velX*velX + velY*velY >
 		max_velocity*max_velocity) {
-		final float fv = FloatMath.sqrt(velX*velX + 
+		final float fv = FloatMath.sqrt(velX*velX +
 						velY*velY);
 		velX = velX * max_velocity/fv;
 		velY = velY * max_velocity/fv;
@@ -315,10 +316,10 @@ public class PongActivity extends Activity
      */
 
     private class PongBall extends Ball {
-	
+
 	private Player player1;
 	private Player player2;
-	
+
 	public PongBall(int color, float radius, Player p1, Player p2,
 			float max_velocity) {
 	    super(color, radius, max_velocity);
@@ -372,13 +373,16 @@ public class PongActivity extends Activity
 	    final float bvo = -dy*b.velX + dx*b.velY;
 	    final float nvd = 2*(bm*bvd + m*vd)/(m+bm) - vd;
 	    final float bnvd = 2*(bm*bvd + m*vd)/(m+bm) - bvd;
-	    
+
 	    velX = dx*nvd - dy*vo;
 	    velY = dy*nvd + dx*vo;
 	    /* This will not change the Players behavior, unless
 	     * he is in fling_mode */
 	    b.velX = dx*bnvd - dy*bvo;
 	    b.velY = dy*bnvd + dx*bvo;
+
+            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            v.vibrate(100);
 	}
 
 	@Override
@@ -419,7 +423,7 @@ public class PongActivity extends Activity
 		    newX = posX + velX * realtime;
 		    newY = posY + velY * realtime;
 		    change = true;
-		} 
+		}
 		/* Get the order right! */
 		else if (newX < boundary.left) {
 		    newX = 2*boundary.left - newX;
@@ -463,7 +467,7 @@ public class PongActivity extends Activity
 	}
 
 	@Override
-	public boolean onScroll(MotionEvent e1, MotionEvent e2, 
+	public boolean onScroll(MotionEvent e1, MotionEvent e2,
 				float dX, float dY) {
 	    player.moveTo(e2.getX(), e2.getY());
 	    return true;
