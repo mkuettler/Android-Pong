@@ -1,24 +1,28 @@
 package com.kuettler.pong;
 
-import android.content.Context;
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.CountDownTimer;
-import android.view.View;
+import android.os.Vibrator;
+import android.util.FloatMath;
+import android.util.Log;
+import android.util.Pair;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.FrameLayout;
-import android.util.FloatMath;
-import android.util.Pair;
 import android.widget.Toast;
-import android.os.Vibrator;
+
 
 public class PongActivity extends Activity
 {
+    private static final String TAG = "PongActivity";
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -258,6 +262,8 @@ public class PongActivity extends Activity
 		    change = true;
 		}
                 if (change) {
+                    //Log.d(TAG, "HumanPlayer.reflectPosition() -- " +
+                    //      posX + ", " + posY + "; " + velX + ", " + velY);
                     vibrator.vibrate(vibrate_length);
                 }
 	    } while (change);
@@ -412,6 +418,8 @@ public class PongActivity extends Activity
 		    player = player2;
 		}
 		if (player != null) {
+                    Log.d(TAG, "PongBall.doMove(): " +
+                          posX + ", " + posY + "; " + velX + ", " + velY);
 		    /* Move to the hit-position */
 		    posX = posX + hittime*velX;
 		    posY = posY + hittime*velY;
