@@ -123,6 +123,9 @@ public class PongActivity extends Activity
 	protected float max_velocity;
 	protected Rect boundary;
 
+        protected final long vibrate_length = 50;
+        protected final Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
 	public Ball(int color, float radius, float max_velocity) {
 	    this.color = color;
 	    this.radius = radius;
@@ -254,6 +257,9 @@ public class PongActivity extends Activity
 		    velY = -velY;
 		    change = true;
 		}
+                if (change) {
+                    vibrator.vibrate(vibrate_length);
+                }
 	    } while (change);
 	}
 
@@ -381,8 +387,7 @@ public class PongActivity extends Activity
 	    b.velX = dx*bnvd - dy*bvo;
 	    b.velY = dy*bnvd + dx*bvo;
 
-            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-            v.vibrate(100);
+            vibrator.vibrate(vibrate_length);
 	}
 
 	@Override
@@ -442,6 +447,9 @@ public class PongActivity extends Activity
 		    velY = -velY;
 		    change = true;
 		}
+                if (change) {
+                    vibrator.vibrate(vibrate_length);
+                }
 	    } while (change);
 	    posX = newX;
 	    posY = newY;
