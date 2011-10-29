@@ -36,6 +36,32 @@ public class PongActivity extends Activity
 	frame.bringChildToFront(play_area);
     }
 
+    /*
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.d(TAG, "onPause");
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.d(TAG, "onStop");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.d(TAG, "onResume");
+    }
+
+    // @Override
+    // public void onWindowFocusChanged (boolean hasFocus) {
+    //     super.onWindowFocusChanged(hasFocus);
+    //     Log.d(TAG, "onWindowFocusChanged: " + hasFocus);
+    // }
+    */
+
     public class PlayAreaView extends View
     {
 
@@ -111,6 +137,16 @@ public class PongActivity extends Activity
 	public void timerFinished() {
 	    setTimer();
 	}
+
+        @Override
+        public void onWindowFocusChanged(boolean hasFocus) {
+            super.onWindowFocusChanged(hasFocus);
+            Log.d(TAG, "PlayAreaView.onWindowFocusChanged: " + hasFocus);
+            if (hasFocus)
+                setTimer();
+            else
+                timer.cancel();
+        }
     }
 
     /*
@@ -168,6 +204,11 @@ public class PongActivity extends Activity
 	}
 
 	abstract public void doMove(long time);
+
+        @Override
+        public String toString() {
+            return getClass().getName() + ": Color=" + color;
+        }
 
     }
 
@@ -419,7 +460,9 @@ public class PongActivity extends Activity
 		}
 		if (player != null) {
                     Log.d(TAG, "PongBall.doMove(): " +
-                          posX + ", " + posY + "; " + velX + ", " + velY);
+                          //"Player=" + player.toString() + "; " +
+                          "pos=(" + posX + ", " + posY +
+                          "); vel=(" + velX + ", " + velY + ")");
 		    /* Move to the hit-position */
 		    posX = posX + hittime*velX;
 		    posY = posY + hittime*velY;
@@ -436,6 +479,11 @@ public class PongActivity extends Activity
 		    newX = posX + velX * realtime;
 		    newY = posY + velY * realtime;
 		    change = true;
+                    Log.d(TAG, "PongBall.doMove(): " +
+                          //"Player=" + player.toString() + "; " +
+                          "new=(" + newX + ", " + newY +
+                          "); vel=(" + velX + ", " + velY + ")");
+
 		}
 		/* Get the order right! */
 		else if (newX < boundary.left) {
