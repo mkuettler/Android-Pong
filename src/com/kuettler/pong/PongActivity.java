@@ -470,11 +470,13 @@ public class PongActivity extends Activity
 		    collideWithBall(player);
 		    clapSpeed();
 		    /* Move away from this ball */
-		    hittime = collideTime(1000.0f /*a lot*/, player).second;
+		    hittime = collideTime(1000000.0f /*a lot*/, player).second;
 		    if (hittime > 0.0f) {
-			posX = posX + (hittime+0.001f)*velX;
-			posY = posY + (hittime+0.001f)*velY;
+			posX = posX + (hittime+0.01f)*velX;
+			posY = posY + (hittime+0.01f)*velY;
 			realtime = realtime - hittime;
+			if (realtime < 0.0f)
+			    realtime = 0.0f;
 		    }
 		    newX = posX + velX * realtime;
 		    newY = posY + velY * realtime;
