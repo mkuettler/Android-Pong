@@ -242,26 +242,41 @@ public class PongActivity extends Activity
 
     class HumanPlayer extends Player {
 
-	private boolean fling_mode;
-	private long fling_time;
+	/* these variables should be static,
+	 * but java doesn't allow them to be.*/
+	private long TARGET_MODE = 1;
+	private long FLING_MODE = 2;
+	private long STILL_MODE = 3;
+	private long fling_sqr_threshold = 2;
+
+	private long move_mode;
 
 	public HumanPlayer(int color, float radius, float max_velocity) {
 	    super(color, radius, max_velocity);
-	    fling_mode = false;
+	    move_mode = STILL_MODE;
 	}
 
 	@Override
+	public void setSpeed(final float vx, final float vy) {
+	    if (move_mode == STILL_MODE)
+		move_mode = FLING_MODE;
+
+	    if (move_mode == FLING_MODE)
+		super.setSpeed(vx, vy);
+	}
+	
+	@Override
 	public void doMove(long time) {
-	    if (!fling_mode) {
+	    if (move_mode == TARGET_MODE) {
 		moveToTarget(time);
-	    } else {
+	    } else if (move_mode == FLING_MODE) {
 		flingMove(time);
 	    }
 
 	}
 
 	public void moveTo(final float x, final float y) {
-	    fling_mode = false;
+	    move_mode = TARGET_MODE;
 	    targetX = x;
 	    targetY = y;
 	    clipTarget();
@@ -319,6 +334,7 @@ public class PongActivity extends Activity
 		velY = (targetY - posY)*1000f/time;
 		posX = targetX;
 		posY = targetY;
+		move_mode = STILL_MODE;
 		return true;
 	    } else {
 		float newX = posX + (targetX-posX) * max_dist/dist;
@@ -339,17 +355,16 @@ public class PongActivity extends Activity
 	    targetY = posY;
 	    velX = velX * 0.8f;
 	    velY = velY * 0.8f;
-	    fling_time = fling_time - time;
-	    if (fling_time <= 0) {
-		fling_mode = false;
+	    if (velX*velX + velY*velY <= fling_sqr_threshold) {
+		move_mode = STILL_MODE;
 		velX = 0.0f;
 		velY = 0.0f;
 	    }
-	    return !fling_mode;
+	    return !(move_mode == FLING_MODE);
 	}
 
 	public void flingBy(final float vX, final float vY) {
-	    fling_mode = true;
+	    move_mode = FLING_MODE;
 	    velX = vX;
 	    velY = vY;
 	    if (velX*velX + velY*velY >
@@ -359,7 +374,6 @@ public class PongActivity extends Activity
 		velX = velX * max_velocity/fv;
 		velY = velY * max_velocity/fv;
 	    }
-	    fling_time = 800;
 	}
 
     }
@@ -431,8 +445,7 @@ public class PongActivity extends Activity
 	    velY = dy*nvd + dx*vo;
 	    /* This will not change the Players behavior, unless
 	     * he is in fling_mode */
-	    b.velX = dx*bnvd - dy*bvo;
-	    b.velY = dy*bnvd + dx*bvo;
+	    b.setSpeed(dx*bnvd - dy*bvo, dy*bnvd + dx*bvo);
 
             vibrator.vibrate(vibrate_length);
 	}
@@ -440,13 +453,13 @@ public class PongActivity extends Activity
 	@Override
 	public void doMove(long time) {
 	    float realtime = time / 1000f;
+	    clapSpeed();
 	    float newX = posX + velX * realtime;
 	    float newY = posY + velY * realtime;
 	    float hittime;
 	    float hittime2;
 	    Player player;
 	    boolean change;
-	    clapSpeed();
 	    do {
 		change = false;
 		player = null;
