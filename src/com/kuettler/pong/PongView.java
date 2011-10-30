@@ -129,7 +129,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
             if (mLastTime > now) return;
 
-            double elapsed = (now - mLastTime) / 1000.0;
+            float elapsed = (now - mLastTime) / 1000.0f;
 
             player1.doMove(elapsed);
             player2.doMove(elapsed);
@@ -198,6 +198,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
     public void surfaceCreated(SurfaceHolder holder) {
         thread.setRunning(true);
         thread.start();
+        thread.doStart();
     }
 
     public void surfaceDestroyed(SurfaceHolder holder) {
@@ -221,31 +222,12 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         return thread;
     }
 
-    /*
-    public void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w,h,oldw,oldh);
-        final float r = player_radius;
-        final float rb = ball_radius;
-        Rect boundary = new Rect((int)r, (int)(h/2+r),
-                                 (int)(w-r), (int)(h-r));
-        player1.setBoundary(boundary);
-        player1.setPosition(w/2f, 3f*h/4);
-        boundary = new Rect((int)r, (int)r, (int)(w-r), (int)(h/2-r));
-        player2.setBoundary(boundary);
-        player2.setPosition(w/2f, h/4f);
-        boundary = new Rect((int)rb, (int)rb, (int)(w-rb), (int)(h-rb));
-        ball.setBoundary(boundary);
-        ball.setPosition(w/2f, 5*h/8f);
-    }
-    */
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         //if (timer == null)
         //    setTimer();
         //Log.d(TAG, "PongView.onTouchEvent");
         //if (thread.getState() ==
-        thread.unpause();
         return gestures.onTouchEvent(event);
     }
 
@@ -254,7 +236,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         Log.d(TAG, "PongView.onWindowFocusChanged: " + hasFocus);
-        if (!hasFocus)
+        if (hasFocus)
+            thread.unpause();
+        else
             thread.pause();
     }
 
@@ -312,7 +296,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	    }
 	}
 
-	abstract public void doMove(double time);
+	abstract public void doMove(float time);
 
         @Override
         public String toString() {
@@ -358,7 +342,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
 	@Override
-	public void doMove(double time) {
+	public void doMove(float time) {
 	    if (!fling_mode) {
 		moveToTarget(time);
 	    } else {
@@ -410,15 +394,13 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 		    change = true;
 		}
                 if (change) {
-                    //Log.d(TAG, "HumanPlayer.reflectPosition() -- " +
-                    //      posX + ", " + posY + "; " + velX + ", " + velY);
                     vibrator.vibrate(vibrate_length);
                 }
 	    } while (change);
 	}
 
-	private boolean moveToTarget(double dtime) {
-            float time = (float)dtime;
+	private boolean moveToTarget(float dtime) {
+            float time = dtime/100;
 	    final float max_dist = max_velocity * time;
 	    final float dist = FloatMath.sqrt((posX-targetX)*(posX-targetX) +
 					      (posY-targetY)*(posY-targetY));
@@ -546,8 +528,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
 	@Override
-	public void doMove(double time) {
-	    float realtime = (float)time; // / 1000f;
+	public void doMove(float time) {
+	    float realtime = time; // / 1000f;
 	    float newX = posX + velX * realtime;
 	    float newY = posY + velY * realtime;
 	    float hittime;
