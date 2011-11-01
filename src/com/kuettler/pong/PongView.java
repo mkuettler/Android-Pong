@@ -147,6 +147,18 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             }
         }
 
+	public boolean doSingleTap(MotionEvent e) {
+            ball.setGoal(e.getX(), e.getY());
+            return true;
+	}
+
+	public boolean doScroll(MotionEvent e1, MotionEvent e2,
+				float dX, float dY) {
+	    //player.moveTo(e2.getX(), e2.getY());
+            //Log.d(TAG, "onScroll: " + e1.toString());
+            ball.setGoal(e2.getX(), e2.getY());
+	    return true;
+	}
     }
 
     private GestureDetector gestures;
@@ -166,7 +178,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
         gestures = new GestureDetector
             (context,
-             new GestureListener(this));
+             new GestureListener(thread));
     }
 
     @Override
@@ -234,6 +246,15 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 return "State(" + x + ", " + y + "); (" +
                     dx + ", " + dy + ")";
             }
+
+            public State difference(State other) {
+                State result = new State();
+                result.x = this.x - other.x;
+                result.y = this.y - other.y;
+                result.dx = this.dx - other.dx;
+                result.dy = this.dy - other.dy;
+                return result;
+            }
         }
 
         protected class Derivative
@@ -263,6 +284,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	protected Rect boundary;
 
         protected State state;
+        protected State goal;
 
         protected final long vibrate_length = 50;
         protected final Vibrator vibrator =
@@ -273,16 +295,25 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	    this.radius = radius;
 	    this.max_velocity = max_velocity;
 
-            state = new State(10, 10, 0, 0);
+            state = new State(0,0,0,0);
+            goal = new State(0,0,0,0);
 	}
 
 	public void setPosition(float x, float y) {
             Log.d(TAG, "Ball: setPosition=" + x + ", " + y);
-            state.x = x;
-            state.y = y;
-            state.dx = 0;
-            state.dy = 0;
+            state.x = goal.x = x;
+            state.y = goal.y = y;
+            state.dx = goal.dx = 0;
+            state.dy = goal.dy = 0;
 	}
+
+	public void setGoal(float x, float y) {
+            Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
+            goal.x = x;
+            goal.y = y;
+            goal.dx = goal.dy = 0;
+	}
+
 
 	public void setBoundary(Rect b) {
 	    this.boundary = b;
@@ -295,8 +326,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	    canvas.drawCircle(state.x, state.y, radius, p);
 	}
 
-        protected Derivative evaluate(float t, float dt, Derivative D)
-        {
+        protected Derivative evaluate(float t, float dt, Derivative D) {
             State S = new State();
             S.x = state.x + D.dx*dt;
             S.y = state.y + D.dy*dt;
@@ -306,9 +336,16 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             Derivative result = new Derivative();
             result.dx = S.dx;
             result.dy = S.dy;
-            //result.ddy = acceleration(S, t+dt);
-            result.ddx = 0;
-            result.ddy = -10 * (S.y - 200) - 0.01f*S.dy;
+
+            // //result.ddy = acceleration(S, t+dt);
+            // result.ddx = 0;
+            // result.ddy = -10 * (S.y - 200) - 0.01f*S.dy;
+
+            State difference = S.difference(goal);
+            float k = 10;
+            float b = 2;
+            result.ddx = -k * difference.x - b*S.dx;
+            result.ddy = -k * difference.y - b*S.dy;
 
             return result;
         }
@@ -340,23 +377,26 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
     private class GestureListener implements GestureDetector.OnGestureListener,
 					     GestureDetector.OnDoubleTapListener
     {
-	PongView view;
+	PongThread thread;
 
-        public GestureListener(PongView view) {
-	    this.view = view;
+        public GestureListener(PongThread thread) {
+	    this.thread = thread;
 	}
 
 	@Override
 	public boolean onDown(MotionEvent e) {
 	    /* We should not always return true here. */
 	    //player.moveTo(e.getX(), e.getY());
-	    return true;
+            //Log.d(TAG, "onDown: " + e.toString());
+            return true;
 	}
 
 	@Override
 	public boolean onScroll(MotionEvent e1, MotionEvent e2,
 				float dX, float dY) {
 	    //player.moveTo(e2.getX(), e2.getY());
+            //Log.d(TAG, "onScroll: " + e1.toString());
+            thread.doScroll(e1, e2, dX, dY);
 	    return true;
 	}
 
@@ -364,37 +404,43 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	public boolean onFling (MotionEvent e1, MotionEvent e2,
 				final float vX, final float vY) {
 	    //player.flingBy(vX, vY);
+            Log.d(TAG, "onFling" + e1.toString());
 	    return true;
 	}
 
 	@Override
 	public boolean onDoubleTap(MotionEvent e) {
+            Log.d(TAG, "onDoubleTap" + e.toString());
 	    return true;
 	}
 
 	@Override
 	public void onLongPress(MotionEvent e) {
-	    return;
+            //Log.d(TAG, "onLongPress" + e.toString());
 	}
 
 	@Override
 	public void onShowPress(MotionEvent e) {
-	    ;
+            //Log.d(TAG, "onShowPress" + e.toString());
 	}
 
 	@Override
 	public boolean onSingleTapUp(MotionEvent e) {
+            //Log.d(TAG, "onSingleTapUp: " + e.toString());
+            thread.doSingleTap(e);
 	    return true;
 	}
 
 	@Override
 	public boolean onDoubleTapEvent(MotionEvent e) {
+            Log.d(TAG, "onDoubleTapEvent: " + e.toString());
 	    return true;
 	}
 
 	@Override
 	public boolean onSingleTapConfirmed(MotionEvent e) {
-	    return true;
+            //Log.d(TAG, "onSingleTapConfirmed: " + e.toString());
+            return true;
 	}
     }
 }
