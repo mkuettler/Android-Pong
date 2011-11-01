@@ -147,16 +147,23 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             }
         }
 
-	public boolean doSingleTap(MotionEvent e) {
+	public boolean doDown(MotionEvent e) {
             ball.setGoal(e.getX(), e.getY());
+            ball.setConstants(800, 50);
             return true;
 	}
 
 	public boolean doScroll(MotionEvent e1, MotionEvent e2,
 				float dX, float dY) {
-	    //player.moveTo(e2.getX(), e2.getY());
-            //Log.d(TAG, "onScroll: " + e1.toString());
             ball.setGoal(e2.getX(), e2.getY());
+            ball.setConstants(10000, 100);
+	    return true;
+	}
+
+	public boolean doFling (MotionEvent e1, MotionEvent e2,
+				float vX, float vY) {
+            ball.setGoal(e2.getX(), e2.getY(), vX, vY);
+            ball.setConstants(10, 10);
 	    return true;
 	}
     }
@@ -279,12 +286,18 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	private int color;
 
 	protected float radius;
-	protected float mass;
-	protected float max_velocity;
+	protected float inverseMass;
 	protected Rect boundary;
 
         protected State state;
+
         protected State goal;
+
+        /** Spring tightness */
+        protected float k;
+
+        /** Damping coefficient */
+        protected float b;
 
         protected final long vibrate_length = 50;
         protected final Vibrator vibrator =
@@ -293,10 +306,13 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	public Ball(int color, float radius, float max_velocity) {
 	    this.color = color;
 	    this.radius = radius;
-	    this.max_velocity = max_velocity;
+	    this.inverseMass = 1.0f;
 
             state = new State(0,0,0,0);
             goal = new State(0,0,0,0);
+
+            k = 800;
+            b = 50;
 	}
 
 	public void setPosition(float x, float y) {
@@ -308,12 +324,24 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
 	public void setGoal(float x, float y) {
-            Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
+            //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
             goal.x = x;
             goal.y = y;
             goal.dx = goal.dy = 0;
 	}
 
+	public void setGoal(float x, float y, float dx, float dy) {
+            //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
+            goal.x = x;
+            goal.y = y;
+            goal.dx = dx;
+            goal.dy = dy;
+	}
+
+        public void setConstants(float k, float b) {
+            this.k = k;
+            this.b = b;
+        }
 
 	public void setBoundary(Rect b) {
 	    this.boundary = b;
@@ -337,17 +365,21 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             result.dx = S.dx;
             result.dy = S.dy;
 
-            // //result.ddy = acceleration(S, t+dt);
-            // result.ddx = 0;
-            // result.ddy = -10 * (S.y - 200) - 0.01f*S.dy;
-
-            State difference = S.difference(goal);
-            float k = 10;
-            float b = 2;
-            result.ddx = -k * difference.x - b*S.dx;
-            result.ddy = -k * difference.y - b*S.dy;
-
+            setAcceleration(result, S, t);
             return result;
+        }
+
+        protected void setAcceleration(Derivative D, State S, float time) {
+            State difference = S.difference(goal);
+
+            // D.ddx = -k * difference.x - b*S.dx;
+            // D.ddy = -k * difference.y - b*S.dy;
+
+            D.ddx = -k * difference.x - b*difference.dx;
+            D.ddy = -k * difference.y - b*difference.dy;
+
+            //D.ddx *= inverseMass;
+            //D.ddy *= inverseMass;
         }
 
         protected void integrate(float t, float dt) {
@@ -388,24 +420,22 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	    /* We should not always return true here. */
 	    //player.moveTo(e.getX(), e.getY());
             //Log.d(TAG, "onDown: " + e.toString());
-            return true;
+            return thread.doDown(e);
 	}
 
 	@Override
 	public boolean onScroll(MotionEvent e1, MotionEvent e2,
 				float dX, float dY) {
 	    //player.moveTo(e2.getX(), e2.getY());
-            //Log.d(TAG, "onScroll: " + e1.toString());
-            thread.doScroll(e1, e2, dX, dY);
-	    return true;
+            //Log.d(TAG, "onScroll: " + e2.toString());
+            return thread.doScroll(e1, e2, dX, dY);
 	}
 
 	@Override
 	public boolean onFling (MotionEvent e1, MotionEvent e2,
-				final float vX, final float vY) {
-	    //player.flingBy(vX, vY);
-            Log.d(TAG, "onFling" + e1.toString());
-	    return true;
+                                float vX, float vY) {
+            //Log.d(TAG, "onFling" + e1.toString());
+            return thread.doFling(e1, e2, vX, vY);
 	}
 
 	@Override
@@ -427,14 +457,14 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	@Override
 	public boolean onSingleTapUp(MotionEvent e) {
             //Log.d(TAG, "onSingleTapUp: " + e.toString());
-            thread.doSingleTap(e);
+            //thread.doSingleTap(e);
 	    return true;
 	}
 
 	@Override
 	public boolean onDoubleTapEvent(MotionEvent e) {
-            Log.d(TAG, "onDoubleTapEvent: " + e.toString());
-	    return true;
+            //Log.d(TAG, "onDoubleTapEvent: " + e.toString());
+	    return false;
 	}
 
 	@Override
