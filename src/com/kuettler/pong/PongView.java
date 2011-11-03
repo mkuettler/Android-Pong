@@ -5,7 +5,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.util.FloatMath;
@@ -140,8 +140,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             synchronized (mSurfaceHolder) {
                 final float r = player_radius;
                 final float rb = ball_radius;
-                Rect boundary = new Rect((int)r, (int)(h/2+r),
-                                         (int)(w-r), (int)(h-r));
+                //RectF boundary = new RectF(r, h/2+r, w-r, h-r);
+                RectF boundary = new RectF(0, 0, w, h);
                 ball.setBoundary(boundary);
                 ball.setPosition(w/2f, 5*h/8f);
             }
@@ -162,8 +162,10 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
 	public boolean doFling (MotionEvent e1, MotionEvent e2,
 				float vX, float vY) {
-            ball.setGoal(e2.getX(), e2.getY(), vX, vY);
-            ball.setConstants(10, 10);
+            //ball.setGoal(e2.getX(), e2.getY(), vX, vY);
+            //ball.setConstants(10, 10);
+            Log.d(TAG, "doFling");
+            ball.setMode(Ball.MODE_FREE);
 	    return true;
 	}
     }
@@ -262,10 +264,22 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 result.dy = this.dy - other.dy;
                 return result;
             }
+
+
+            public float norm() {
+                return norm(x, y);
+            }
+
+            public float dnorm() {
+                return norm(dx, dy);
+            }
+
+            private float norm(float u, float v) {
+                return FloatMath.sqrt(u*u + v*v);
+            }
         }
 
-        protected class Derivative
-        {
+        protected class Derivative {
             public float dx, dy, ddx, ddy;
 
             public Derivative() {}
@@ -283,15 +297,29 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             }
         }
 
+        protected class Contact {
+            public float nx, ny, depth;
+            public State ball_state;
+
+            public String toString() {
+                return "n=(" + nx + "," + ny + "); depth=" + depth +
+                    "; ball=" + state.toString();
+            }
+        }
+
 	private int color;
 
 	protected float radius;
 	protected float inverseMass;
-	protected Rect boundary;
+	protected RectF boundary;
 
-        protected State state;
+        protected final State state;
 
-        protected State goal;
+        protected final State goal;
+
+        public static final int MODE_FREE = 1;
+        public static final int MODE_FORCED = 2;
+        protected int mode;
 
         /** Spring tightness */
         protected float k;
@@ -328,6 +356,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             goal.x = x;
             goal.y = y;
             goal.dx = goal.dy = 0;
+            setMode(MODE_FORCED);
 	}
 
 	public void setGoal(float x, float y, float dx, float dy) {
@@ -336,14 +365,24 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             goal.y = y;
             goal.dx = dx;
             goal.dy = dy;
+            setMode(MODE_FREE);
 	}
+
+        public void setMode(int m) {
+            if (mode == MODE_FORCED) {
+                Log.d(TAG, "Set mode to forced");
+            } else if (mode == MODE_FREE) {
+                Log.d(TAG, "Set mode to free");
+            }
+            mode = m;
+        }
 
         public void setConstants(float k, float b) {
             this.k = k;
             this.b = b;
         }
 
-	public void setBoundary(Rect b) {
+	public void setBoundary(RectF b) {
 	    this.boundary = b;
 	}
 
@@ -355,7 +394,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
         protected Derivative evaluate(float t, float dt, Derivative D) {
-            State S = new State();
+            final State S = new State();
             S.x = state.x + D.dx*dt;
             S.y = state.y + D.dy*dt;
             S.dx = state.dx + D.ddx*dt;
@@ -375,8 +414,39 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             // D.ddx = -k * difference.x - b*S.dx;
             // D.ddy = -k * difference.y - b*S.dy;
 
-            D.ddx = -k * difference.x - b*difference.dx;
-            D.ddy = -k * difference.y - b*difference.dy;
+            // final Contact contact = new Contact();
+            // if (boundaryCollision(contact)) {
+            //     Log.d(TAG, "Boundary collision detected: " + contact.toString());
+
+            //     setConstants(10, 0);
+            //     free = true;
+            //     flinging = false;
+            //     Log.d(TAG, "Set state to free");
+
+            //     float scalarprod =
+            //         contact.nx*contact.ball_state.dx +
+            //         contact.ny*contact.ball_state.dy;
+
+            //     D.ddx = contact.nx * (k * contact.depth + b * scalarprod);
+            //     D.ddy = contact.ny * (k * contact.depth + b * scalarprod);
+            //     return;
+            // }
+
+            // if (flinging) {
+            //     setConstants(5, 10);
+            //     D.ddx = -k * difference.dx - b*state.dx;
+            //     D.ddy = -k * difference.dy - b*state.dy;
+            if (mode == MODE_FORCED) {
+                D.ddx = -k * difference.x - b*difference.dx;
+                D.ddy = -k * difference.y - b*difference.dy;
+            } else if (mode == MODE_FREE) {
+                D.ddx = -2.75f*state.dx;
+                D.ddy = -2.75f*state.dy;
+            }
+            else {
+                Log.wtf(TAG, "Unknown mode " + mode);
+            }
+
 
             //D.ddx *= inverseMass;
             //D.ddy *= inverseMass;
@@ -399,11 +469,38 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             state.dy = state.dy + ddydt * dt;
         }
 
+        protected boolean boundaryCollision(Contact contact) {
+            final RectF box = new RectF();
+            box.set(state.x-radius, state.y-radius,
+                    state.x+radius, state.y+radius);
+
+            if (boundary.contains(box))
+                return false;
+
+            contact.ball_state = state;
+            contact.nx = contact.ny = 0;
+
+            box.union(boundary);
+            Log.d(TAG, "box = " + box.toString() +
+                  "boundary = " + boundary.toString());
+            if (box.right > boundary.right)
+                contact.nx = -1;
+            else if (box.bottom > boundary.bottom)
+                contact.ny = -1;
+            else if (box.left < boundary.left)
+                contact.nx = 1;
+            else
+                contact.ny = 1;
+
+            contact.depth = box.width() + box.height()
+                - boundary.width() - boundary.height();
+            return true;
+        }
+
         @Override
         public String toString() {
             return getClass().getName() + ": Color=" + color;
         }
-
     }
 
     private class GestureListener implements GestureDetector.OnGestureListener,
