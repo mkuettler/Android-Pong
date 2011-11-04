@@ -140,8 +140,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             synchronized (mSurfaceHolder) {
                 final float r = player_radius;
                 final float rb = ball_radius;
-                //RectF boundary = new RectF(r, h/2+r, w-r, h-r);
                 RectF boundary = new RectF(0, 0, w, h);
+                //boundary.inset(30, 30);
                 ball.setBoundary(boundary);
                 ball.setPosition(w/2f, 5*h/8f);
             }
@@ -164,8 +164,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 				float vX, float vY) {
             //ball.setGoal(e2.getX(), e2.getY(), vX, vY);
             //ball.setConstants(10, 10);
-            Log.d(TAG, "doFling");
             ball.setMode(Ball.MODE_FREE);
+            ball.state.x = e2.getX();
+            ball.state.y = e2.getY();
 	    return true;
 	}
     }
@@ -295,6 +296,18 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 return "Derivative(" + dx + ", " + dy + "); (" +
                     ddx + ", " + ddy + ")";
             }
+
+            public float dnorm() {
+                return norm(dx, dy);
+            }
+
+            public float ddnorm() {
+                return norm(ddx, ddy);
+            }
+
+            private float norm(float u, float v) {
+                return FloatMath.sqrt(u*u + v*v);
+            }
         }
 
         protected class Contact {
@@ -369,12 +382,12 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
         public void setMode(int m) {
-            if (mode == MODE_FORCED) {
-                Log.d(TAG, "Set mode to forced");
-            } else if (mode == MODE_FREE) {
-                Log.d(TAG, "Set mode to free");
-            }
             mode = m;
+            // if (mode == MODE_FORCED) {
+            //     Log.d(TAG, "Set mode to forced");
+            // } else if (mode == MODE_FREE) {
+            //     Log.d(TAG, "Set mode to free");
+            // }
         }
 
         public void setConstants(float k, float b) {
@@ -409,12 +422,10 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         }
 
         protected void setAcceleration(Derivative D, State S, float time) {
-            State difference = S.difference(goal);
-
             // D.ddx = -k * difference.x - b*S.dx;
             // D.ddy = -k * difference.y - b*S.dy;
 
-            // final Contact contact = new Contact();
+            // Contact contact = new Contact();
             // if (boundaryCollision(contact)) {
             //     Log.d(TAG, "Boundary collision detected: " + contact.toString());
 
@@ -437,21 +448,22 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             //     D.ddx = -k * difference.dx - b*state.dx;
             //     D.ddy = -k * difference.dy - b*state.dy;
             if (mode == MODE_FORCED) {
+                State difference = S.difference(goal);
                 D.ddx = -k * difference.x - b*difference.dx;
                 D.ddy = -k * difference.y - b*difference.dy;
             } else if (mode == MODE_FREE) {
-                D.ddx = -2.75f*state.dx;
-                D.ddy = -2.75f*state.dy;
+                D.ddx = - 0.005f*Math.abs(state.dx)*state.dx - 2*state.dx;
+                D.ddy = - 0.005f*Math.abs(state.dy)*state.dy - 2*state.dy;;
             }
             else {
                 Log.wtf(TAG, "Unknown mode " + mode);
             }
 
-
             //D.ddx *= inverseMass;
             //D.ddy *= inverseMass;
         }
 
+        // private int mycounter = 0;
         protected void integrate(float t, float dt) {
             Derivative a = evaluate(t, 0.0f, new Derivative());
             Derivative b = evaluate(t+dt*0.5f, dt*0.5f, a);
@@ -467,34 +479,45 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             state.y = state.y + dydt * dt;
             state.dx = state.dx + ddxdt * dt;
             state.dy = state.dy + ddydt * dt;
+
+            fixBoundaryCollision();
+
+            // if (++mycounter > 20) {
+            //     Log.d(TAG, "New state is " + state.toString());
+            //     mycounter = 0;
+            // }
         }
 
-        protected boolean boundaryCollision(Contact contact) {
-            final RectF box = new RectF();
+        protected final RectF box = new RectF();
+
+        private final Contact lastContact = new Contact();
+        protected boolean fixBoundaryCollision() {
             box.set(state.x-radius, state.y-radius,
                     state.x+radius, state.y+radius);
-
-            if (boundary.contains(box))
-                return false;
-
-            contact.ball_state = state;
-            contact.nx = contact.ny = 0;
-
             box.union(boundary);
-            Log.d(TAG, "box = " + box.toString() +
-                  "boundary = " + boundary.toString());
-            if (box.right > boundary.right)
-                contact.nx = -1;
-            else if (box.bottom > boundary.bottom)
-                contact.ny = -1;
-            else if (box.left < boundary.left)
-                contact.nx = 1;
-            else
-                contact.ny = 1;
 
-            contact.depth = box.width() + box.height()
-                - boundary.width() - boundary.height();
-            return true;
+            Contact c = lastContact;
+            c.nx = c.ny = 0;
+
+            c.depth = box.width() - boundary.width();
+            if (c.depth > 0) {
+                c.nx = Math.signum(boundary.centerX() - state.x);
+                state.x += c.depth*c.nx;
+                state.y += c.depth*c.ny*state.dy/state.dx;
+                state.dx *= -1;
+                return true;
+            }
+
+            c.depth = box.height() - boundary.height();
+            if (c.depth > 0) {
+                c.ny = Math.signum(boundary.centerY() - state.y);
+                state.x += c.depth*c.ny*state.dx/state.dy;
+                state.y += c.depth*c.ny;
+                state.dy *= -1;
+                return true;
+            }
+
+            return false;
         }
 
         @Override
@@ -537,7 +560,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
 	@Override
 	public boolean onDoubleTap(MotionEvent e) {
-            Log.d(TAG, "onDoubleTap" + e.toString());
+            Log.d(TAG, "onDoubleTap: " + e.toString());
 	    return true;
 	}
 
