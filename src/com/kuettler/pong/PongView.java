@@ -60,8 +60,12 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             mSurfaceHolder = holder;
             mView = view;
 
-            ball = new Ball(Color.WHITE, ball_radius);
-            other_ball = new Ball(Color.RED, ball_radius);
+            ball = new Ball(Color.WHITE, ball_radius, 500000);
+            ball.setFreeConstants(0.25f, 0.2f);
+            ball.setCollisionConstants(500, 1);
+            other_ball = new Ball(Color.RED, ball_radius, 500);
+            other_ball.setFreeConstants(0.0f, 0.1f);
+            other_ball.setCollisionConstants(500, 0);
         }
 
         public void setRunning(boolean b) {
@@ -381,20 +385,24 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         /** Damping coefficient */
         protected float b;
 
+        protected float maxV;
+
         protected final long vibrate_length = 50;
         protected final Vibrator vibrator =
             (Vibrator)mContext.getSystemService(Context.VIBRATOR_SERVICE);
 
-	public Ball(int color, float radius) {
+	public Ball(int color, float radius, float maxV) {
 	    this.color = color;
 	    this.radius = radius;
 	    this.inverseMass = 1.0f;
+            this.maxV = maxV;
 
             state = new State(0,0,0,0);
             goal = new State(0,0,0,0);
 
             mode = MODE_FREE;
 
+            setFreeConstants(0.005f, 10);
             // k = 800;
             // b = 50;
 	}
@@ -440,6 +448,19 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             this.b = b;
         }
 
+        protected float k1, k2;
+        public void setFreeConstants(float k1, float k2) {
+            this.k1 = k1;
+            this.k2 = k2;
+        }
+
+        protected float k3, k4;
+        public void setCollisionConstants(float k3, float k4) {
+            this.k3 = k3;
+            this.k4 = k4;
+        }
+
+
 	public void setBoundary(RectF b) {
             boundary = b;
             inset = new RectF(b);
@@ -474,15 +495,17 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 D.ddx = -k * difference.x - b*difference.dx;
                 D.ddy = -k * difference.y - b*difference.dy;
             } else if (mode == MODE_FREE) {
-                D.ddx = - 0.005f*Math.abs(state.dx)*state.dx - 4*state.dx;
-                D.ddy = - 0.005f*Math.abs(state.dy)*state.dy - 4*state.dy;;
+                D.ddx = - k1*FloatMath.sqrt(Math.abs(state.dx))*state.dx
+                    - k2*state.dx;
+                D.ddy = - k1*FloatMath.sqrt(Math.abs(state.dy))*state.dy
+                    - k2*state.dy;;
             } else if (mode == MODE_COLLISION) {
-                Log.d(TAG, "Collision mode, contact=" + lastBallContact.toString());
-                setConstants(500*lastBallContact.depth, 50);
+                //Log.d(TAG, "Collision mode, contact=" + lastBallContact.toString());
                 float sprod = lastBallContact.nx*lastBallContact.difference.dx +
                     lastBallContact.ny*lastBallContact.difference.dy;
-                D.ddx = (k*lastBallContact.depth - b*sprod)*lastBallContact.nx;
-                D.ddy = (k*lastBallContact.depth - b*sprod)*lastBallContact.ny;
+                setConstants(k3*lastBallContact.depth, k4*sprod);
+                D.ddx = (k*lastBallContact.depth - b)*lastBallContact.nx;
+                D.ddy = (k*lastBallContact.depth - b)*lastBallContact.ny;
             }
             else {
                 Log.e(TAG, "Unknown mode " + mode);
@@ -508,6 +531,12 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             state.y = state.y + dydt * dt;
             state.dx = state.dx + ddxdt * dt;
             state.dy = state.dy + ddydt * dt;
+
+            float velocity = state.dnorm();
+            if (velocity > maxV) {
+                state.dx = maxV*state.dx/velocity;
+                state.dy = maxV*state.dy/velocity;
+            }
 
             fixBoundaryCollision();
 
