@@ -51,6 +51,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         private static final float ball_radius = 15f;
 
         private Ball ball;
+        private Ball other_ball;
 
         /** The state of the game. One of READY, RUNNING, PAUSE, LOSE, or WIN */
         private int mMode;
@@ -59,7 +60,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             mSurfaceHolder = holder;
             mView = view;
 
-            ball = new Ball(Color.WHITE, ball_radius, max_ball_velocity);
+            ball = new Ball(Color.WHITE, ball_radius);
+            other_ball = new Ball(Color.RED, ball_radius);
         }
 
         public void setRunning(boolean b) {
@@ -76,6 +78,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                         if (mMode == STATE_RUNNING) updatePhysics();
                         canvas.drawColor(Color.BLACK);
                         ball.draw(canvas);
+                        other_ball.draw(canvas);
                     }
                 } finally {
                     // do this in a finally so that if an exception is thrown
@@ -122,7 +125,19 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
             long elapsed = now - mLastTime;
 
+            if (ball.detectOtherBallCollision(other_ball)) {
+                Log.d(TAG, "Ball collision detected");
+                ball.setMode(Ball.MODE_COLLISION);
+                other_ball.setMode(Ball.MODE_COLLISION);
+                other_ball.lastBallContact = ball.lastBallContact.scale(-1);
+            } else {
+                if (ball.mode == Ball.MODE_COLLISION)
+                    ball.setMode(Ball.MODE_FREE);
+                if (other_ball.mode == Ball.MODE_COLLISION)
+                    other_ball.setMode(Ball.MODE_FREE);
+            }
             ball.integrate(now/1000f, elapsed/1000f);
+            other_ball.integrate(now/1000f, elapsed/1000f);
             mLastTime = now;
         }
 
@@ -144,6 +159,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 //boundary.inset(30, 30);
                 ball.setBoundary(boundary);
                 ball.setPosition(w/2f, 5*h/8f);
+
+                other_ball.setBoundary(boundary);
+                other_ball.setPosition(w/2f, h/2f);
             }
         }
 
@@ -252,6 +270,10 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 this.dy = dy;
             }
 
+            public State(State S) {
+                this(S.x, S.y, S.dx, S.dy);
+            }
+
             public String toString() {
                 return "State(" + x + ", " + y + "); (" +
                     dx + ", " + dy + ")";
@@ -266,6 +288,14 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 return result;
             }
 
+            public State scale(float a) {
+                State result = new State(this);
+                result.x *= a;
+                result.y *= a;
+                result.dx *= a;
+                result.dy *= a;
+                return result;
+            }
 
             public float norm() {
                 return norm(x, y);
@@ -312,11 +342,20 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
         protected class Contact {
             public float nx, ny, depth;
-            public State ball_state;
+            public State difference;
+
+            public Contact scale(float a) {
+                Contact result = new Contact();
+                result.nx = a*nx;
+                result.ny = a*ny;
+                result.depth = depth;
+                result.difference = difference.scale(a);
+                return result;
+            }
 
             public String toString() {
                 return "n=(" + nx + "," + ny + "); depth=" + depth +
-                    "; ball=" + state.toString();
+                    "; difference=" + difference.toString();
             }
         }
 
@@ -325,6 +364,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	protected float radius;
 	protected float inverseMass;
 	protected RectF boundary;
+	protected RectF inset;
 
         protected final State state;
 
@@ -332,6 +372,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
         public static final int MODE_FREE = 1;
         public static final int MODE_FORCED = 2;
+        public static final int MODE_COLLISION = 3;
         protected int mode;
 
         /** Spring tightness */
@@ -344,7 +385,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         protected final Vibrator vibrator =
             (Vibrator)mContext.getSystemService(Context.VIBRATOR_SERVICE);
 
-	public Ball(int color, float radius, float max_velocity) {
+	public Ball(int color, float radius) {
 	    this.color = color;
 	    this.radius = radius;
 	    this.inverseMass = 1.0f;
@@ -352,8 +393,10 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             state = new State(0,0,0,0);
             goal = new State(0,0,0,0);
 
-            k = 800;
-            b = 50;
+            mode = MODE_FREE;
+
+            // k = 800;
+            // b = 50;
 	}
 
 	public void setPosition(float x, float y) {
@@ -366,6 +409,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
 	public void setGoal(float x, float y) {
             //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
+            if (!inset.contains(x,y))
+                return;
             goal.x = x;
             goal.y = y;
             goal.dx = goal.dy = 0;
@@ -396,7 +441,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         }
 
 	public void setBoundary(RectF b) {
-	    this.boundary = b;
+            boundary = b;
+            inset = new RectF(b);
+            inset.inset(radius, radius);
 	}
 
 	public void draw(Canvas canvas) {
@@ -422,41 +469,23 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         }
 
         protected void setAcceleration(Derivative D, State S, float time) {
-            // D.ddx = -k * difference.x - b*S.dx;
-            // D.ddy = -k * difference.y - b*S.dy;
-
-            // Contact contact = new Contact();
-            // if (boundaryCollision(contact)) {
-            //     Log.d(TAG, "Boundary collision detected: " + contact.toString());
-
-            //     setConstants(10, 0);
-            //     free = true;
-            //     flinging = false;
-            //     Log.d(TAG, "Set state to free");
-
-            //     float scalarprod =
-            //         contact.nx*contact.ball_state.dx +
-            //         contact.ny*contact.ball_state.dy;
-
-            //     D.ddx = contact.nx * (k * contact.depth + b * scalarprod);
-            //     D.ddy = contact.ny * (k * contact.depth + b * scalarprod);
-            //     return;
-            // }
-
-            // if (flinging) {
-            //     setConstants(5, 10);
-            //     D.ddx = -k * difference.dx - b*state.dx;
-            //     D.ddy = -k * difference.dy - b*state.dy;
             if (mode == MODE_FORCED) {
                 State difference = S.difference(goal);
                 D.ddx = -k * difference.x - b*difference.dx;
                 D.ddy = -k * difference.y - b*difference.dy;
             } else if (mode == MODE_FREE) {
-                D.ddx = - 0.005f*Math.abs(state.dx)*state.dx - 2*state.dx;
-                D.ddy = - 0.005f*Math.abs(state.dy)*state.dy - 2*state.dy;;
+                D.ddx = - 0.005f*Math.abs(state.dx)*state.dx - 4*state.dx;
+                D.ddy = - 0.005f*Math.abs(state.dy)*state.dy - 4*state.dy;;
+            } else if (mode == MODE_COLLISION) {
+                Log.d(TAG, "Collision mode, contact=" + lastBallContact.toString());
+                setConstants(500*lastBallContact.depth, 50);
+                float sprod = lastBallContact.nx*lastBallContact.difference.dx +
+                    lastBallContact.ny*lastBallContact.difference.dy;
+                D.ddx = (k*lastBallContact.depth - b*sprod)*lastBallContact.nx;
+                D.ddy = (k*lastBallContact.depth - b*sprod)*lastBallContact.ny;
             }
             else {
-                Log.wtf(TAG, "Unknown mode " + mode);
+                Log.e(TAG, "Unknown mode " + mode);
             }
 
             //D.ddx *= inverseMass;
@@ -518,6 +547,21 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             }
 
             return false;
+        }
+
+        protected Contact lastBallContact = new Contact();
+        protected boolean detectOtherBallCollision(Ball other) {
+            State difference = state.difference(other.state);
+            float distance = difference.norm();
+            float depth = this.radius + other.radius - distance;
+            if (depth < 0)
+                return false;
+
+            lastBallContact.nx = difference.x/distance;
+            lastBallContact.ny = difference.y/distance;
+            lastBallContact.depth = depth;
+            lastBallContact.difference = difference;
+            return true;
         }
 
         @Override
