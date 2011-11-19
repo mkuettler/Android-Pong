@@ -7,7 +7,10 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.os.Vibrator;
+import android.util.AttributeSet;
 import android.util.FloatMath;
 import android.util.Log;
 import android.util.Pair;
@@ -15,6 +18,8 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.widget.TextView;
 
 public class PongView extends SurfaceView implements SurfaceHolder.Callback
 {
@@ -27,8 +32,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
         private PongView mView;
 
-        ///** Message handler used by thread to interact with TextView */
-        //private Handler mHandler;
+        /** Message handler used by thread to interact with TextView */
+        private Handler mHandler;
 
         /** Indicate whether the surface has been created & is ready to draw */
         private boolean mRun = false;
@@ -45,9 +50,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         public static final int STATE_RUNNING = 4;
         public static final int STATE_WIN = 5;
 
-        private static final float max_player_velocity = 1000f;
+        private static final float max_player_velocity = 750;
         private static final float player_radius = 30f;
-        private static final float max_ball_velocity = 2000f;
+        private static final float max_ball_velocity = 500;
         private static final float ball_radius = 15f;
 
         private Ball ball;
@@ -56,15 +61,17 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         /** The state of the game. One of READY, RUNNING, PAUSE, LOSE, or WIN */
         private int mMode;
 
-        public PongThread(SurfaceHolder holder, PongView view, Context context) {
+        public PongThread(SurfaceHolder holder, PongView view, Context context,
+                          Handler handler) {
             mSurfaceHolder = holder;
             mView = view;
+            mHandler = handler;
 
-            ball = new Ball(Color.GRAY, 2*ball_radius, 500000);
+            ball = new Ball(Color.GRAY, 2*ball_radius, max_player_velocity);
             ball.setFreeConstants(0.25f, 0.2f);
             ball.setCollisionConstants(500, 20);
             ball.human = true;
-            other_ball = new Ball(Color.RED, ball_radius, 500);
+            other_ball = new Ball(Color.RED, ball_radius, max_ball_velocity);
             other_ball.setFreeConstants(0.0f, 0.1f);
             other_ball.setCollisionConstants(500, 0);
             other_ball.human = false;
@@ -100,7 +107,21 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         public void setState(int mode) {
             synchronized (mSurfaceHolder) {
                 mMode = mode;
+                Log.d(TAG, "Mode is now " + mode);
             }
+
+            Message msg = mHandler.obtainMessage();
+            Bundle b = new Bundle();
+
+            if (mMode == STATE_RUNNING) {
+                b.putString("text", "");
+                b.putInt("viz", View.INVISIBLE);
+            } else if (mMode == STATE_PAUSE) {
+                b.putString("text", "Pause");
+                b.putInt("viz", View.VISIBLE);
+            }
+            msg.setData(b);
+            mHandler.sendMessage(msg);
         }
 
         /**
@@ -174,7 +195,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	public boolean doDown(MotionEvent e) {
             ball.setGoal(e.getX(), e.getY());
             //ball.setConstants(800, 50); // nice fast effect
-            ball.setConstants(300, 50);
+            ball.setConstants(200, 50);
             return true;
 	}
 
@@ -182,10 +203,9 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 				float dX, float dY) {
             ball.setGoal(e2.getX(), e2.getY());
             float d = ball.differenceToGoal();
-            float m = Math.max((float)Math.exp(-d/100),
-                               1.0f/33);
+            float m = (float)Math.exp(-d/50);
             //Log.d(TAG, "Multiplier is " + m);
-            ball.setConstants(10000*m, 100);
+            ball.setConstants(10000*m, 50);
 	    return true;
 	}
 
@@ -193,19 +213,31 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 				float vX, float vY) {
             //ball.setGoal(e2.getX(), e2.getY(), vX, vY);
             //ball.setConstants(10, 10);
-            ball.setMode(Ball.MODE_FREE);
+            /*ball.setMode(Ball.MODE_FREE);
             ball.state.x = e2.getX();
-            ball.state.y = e2.getY();
+            ball.state.y = e2.getY();*/
 	    return true;
 	}
+
+        public Bundle saveState(Bundle map) {
+            synchronized (mSurfaceHolder) {
+                if (map != null) {
+                    //map.putInt(KEY_DIFFICULTY, Integer.valueOf(mDifficulty));
+                    map.putFloat("ball.x", ball.state.x);
+                    map.putFloat("ball.y", ball.state.y);
+                }
+            }
+            return map;
+        }
     }
 
     private GestureDetector gestures;
     private PongThread thread;
     private Context mContext;
+    private TextView mStatusText;
 
-    public PongView(Context context) {
-        super(context);
+    public PongView(Context context, AttributeSet attrs) {
+        super(context, attrs);
         mContext = context;
 
         // register our interest in hearing about changes to our surface
@@ -213,11 +245,21 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
         holder.addCallback(this);
 
         // create thread only; it's started in surfaceCreated()
-        thread = new PongThread(holder, this, context);
+        thread = new PongThread(holder, this, context, new Handler() {
+            @Override
+            public void handleMessage(Message m) {
+                mStatusText.setVisibility(m.getData().getInt("viz"));
+                mStatusText.setText(m.getData().getString("text"));
+            }
+        });
 
         gestures = new GestureDetector
             (context,
              new GestureListener(thread));
+    }
+
+    public void setTextView(TextView textView) {
+        mStatusText = textView;
     }
 
     @Override
@@ -258,10 +300,14 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         Log.d(TAG, "PongView.onWindowFocusChanged: " + hasFocus);
-        if (hasFocus)
+
+        if (!hasFocus)
+            thread.pause();
+
+        /*if (hasFocus)
             thread.unpause();
         else
-            thread.pause();
+        thread.pause();*/
     }
 
     /*
@@ -431,7 +477,7 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 y = Math.max(y, inset.top+2);
                 y = Math.min(y, inset.bottom-2);
             }
-            Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
+            //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
             goal.x = x;
             goal.y = y;
             goal.dx = goal.dy = 0;
