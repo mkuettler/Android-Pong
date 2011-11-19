@@ -60,12 +60,14 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             mSurfaceHolder = holder;
             mView = view;
 
-            ball = new Ball(Color.WHITE, ball_radius, 500000);
+            ball = new Ball(Color.GRAY, 2*ball_radius, 500000);
             ball.setFreeConstants(0.25f, 0.2f);
-            ball.setCollisionConstants(500, 1);
+            ball.setCollisionConstants(500, 20);
+            ball.human = true;
             other_ball = new Ball(Color.RED, ball_radius, 500);
             other_ball.setFreeConstants(0.0f, 0.1f);
             other_ball.setCollisionConstants(500, 0);
+            other_ball.human = false;
         }
 
         public void setRunning(boolean b) {
@@ -171,14 +173,19 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
 	public boolean doDown(MotionEvent e) {
             ball.setGoal(e.getX(), e.getY());
-            ball.setConstants(800, 50);
+            //ball.setConstants(800, 50); // nice fast effect
+            ball.setConstants(300, 50);
             return true;
 	}
 
 	public boolean doScroll(MotionEvent e1, MotionEvent e2,
 				float dX, float dY) {
             ball.setGoal(e2.getX(), e2.getY());
-            ball.setConstants(10000, 100);
+            float d = ball.differenceToGoal();
+            float m = Math.max((float)Math.exp(-d/100),
+                               1.0f/33);
+            //Log.d(TAG, "Multiplier is " + m);
+            ball.setConstants(10000*m, 100);
 	    return true;
 	}
 
@@ -387,9 +394,11 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 
         protected float maxV;
 
-        protected final long vibrate_length = 50;
+        protected long last_vibrate_time = 0;
+        protected final long vibrate_length = 40;
         protected final Vibrator vibrator =
             (Vibrator)mContext.getSystemService(Context.VIBRATOR_SERVICE);
+        protected boolean human;
 
 	public Ball(int color, float radius, float maxV) {
 	    this.color = color;
@@ -416,15 +425,20 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
 	public void setGoal(float x, float y) {
-            //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
-            if (!inset.contains(x,y))
-                return;
+            if (!inset.contains(x,y)) {
+                x = Math.max(x, inset.left+2);
+                x = Math.min(x, inset.right-2);
+                y = Math.max(y, inset.top+2);
+                y = Math.min(y, inset.bottom-2);
+            }
+            Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
             goal.x = x;
             goal.y = y;
             goal.dx = goal.dy = 0;
             setMode(MODE_FORCED);
 	}
 
+        /*
 	public void setGoal(float x, float y, float dx, float dy) {
             //Log.d(TAG, "Ball: setGoal=" + x + ", " + y);
             goal.x = x;
@@ -432,15 +446,13 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             goal.dx = dx;
             goal.dy = dy;
             setMode(MODE_FREE);
-	}
+            }*/
 
         public void setMode(int m) {
+            if (human && m == MODE_COLLISION && mode != MODE_COLLISION &&
+                lastBallContact.difference.dnorm() > 150)
+                vibrate();
             mode = m;
-            // if (mode == MODE_FORCED) {
-            //     Log.d(TAG, "Set mode to forced");
-            // } else if (mode == MODE_FREE) {
-            //     Log.d(TAG, "Set mode to free");
-            // }
         }
 
         public void setConstants(float k, float b) {
@@ -500,7 +512,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 D.ddy = - k1*FloatMath.sqrt(Math.abs(state.dy))*state.dy
                     - k2*state.dy;;
             } else if (mode == MODE_COLLISION) {
-                //Log.d(TAG, "Collision mode, contact=" + lastBallContact.toString());
+                //Log.d(TAG, "Collision mode, contact=" +
+                //lastBallContact.toString());
                 float sprod = lastBallContact.nx*lastBallContact.difference.dx +
                     lastBallContact.ny*lastBallContact.difference.dy;
                 setConstants(k3*lastBallContact.depth, k4*sprod);
@@ -538,7 +551,8 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
                 state.dy = maxV*state.dy/velocity;
             }
 
-            fixBoundaryCollision();
+            if (fixBoundaryCollision() && velocity > 175)
+                vibrate();
 
             // if (++mycounter > 20) {
             //     Log.d(TAG, "New state is " + state.toString());
@@ -593,9 +607,20 @@ public class PongView extends SurfaceView implements SurfaceHolder.Callback
             return true;
         }
 
+        public void vibrate() {
+            long now = System.currentTimeMillis();
+            if (now - last_vibrate_time > 150)
+                vibrator.vibrate(vibrate_length);
+            last_vibrate_time = now;
+        }
+
         @Override
         public String toString() {
             return getClass().getName() + ": Color=" + color;
+        }
+
+        public float differenceToGoal() {
+            return state.difference(goal).norm();
         }
     }
 
